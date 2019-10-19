@@ -1,10 +1,11 @@
 clear
+est clear
 set more off
 set mem 10m
 
 cd "C:\Users\mikew\Desktop\University\TilburgUniversity\Master\panel_data_analysis\assignment_1"
-global data "data"
-global output "output"
+local data "data"
+local output "output"
 
 // Load data
 use "$data\soep.dta", clear
@@ -31,8 +32,7 @@ label variable hhincome "household income"
 // Declare this data to be panel data
 xtset persnr year
 
-// Exercise 1
-// a
+// Exercise 1a
 gen cohort = year - age
 label variable cohort "cohort (birth year)"
 
@@ -71,3 +71,39 @@ graph twoway line mean_s_life_1914_c10 age|| line mean_s_life_1924_c10 age ///
 	ytitle("Mean life satisfaction") graphregion(color(white))
 
 gr export "$output/spaghetti_plot_10_cohorts.eps", as(eps) preview(off) replace
+
+// Exercise 1c
+// Create dummies for cohorts 
+forvalues i = 1914(5)1963 {
+	gen cohort_`i'_c5 = cohort>=`i' & cohort<=`i'+4
+}
+
+forvalues i = 1914(10)1963 {
+	gen cohort_`i'_c10 = cohort>=`i' & cohort<=`i'+9
+}
+
+// Create macro
+local cohort_dummies "cohort_1914_c5 cohort_1919_c5 cohort_1924_c5 cohort_1929_c5 cohort_1934_c5 cohort_1939_c5 cohort_1944_c5 cohort_1949_c5 cohort_1954_c5 cohort_1959_c5 cohort_1914_c10 cohort_1924_c10 cohort_1934_c10 cohort_1944_c10 cohort_1954_c10"
+
+// Run the regression
+/* Unfortunately, we get an error when using the macro:
+>reg s_life age year $cohort_dummies
+	>Error: "cohort_1914_c5 cohort_1919_c5 cohort_1924_c5 not allowed
+*/
+
+eststo: reg s_life age year cohort_1914_c5 cohort_1919_c5 cohort_1924_c5 ///
+	cohort_1929_c5 cohort_1934_c5 cohort_1939_c5 cohort_1944_c5 ///
+	cohort_1949_c5 cohort_1954_c5 cohort_1959_c5 cohort_1914_c10 ///
+	cohort_1924_c10 cohort_1934_c10 cohort_1944_c10 cohort_1954_c10
+
+esttab using "$output/output_1c.tex", ///
+	replace booktabs title(Regression table \label{tab:regression_1c})
+	
+// Exercise 2
+set seed 345398
+drawnorm alpha_i, n(200)
+expand 5
+drawnorm nu_it e_it, n(1000)
+g x_it=nu_it+alpha_i
+drop nu_it
+g y_it=3+alpha_i+2*x_it+e_it
