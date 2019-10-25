@@ -3,31 +3,12 @@ est clear
 set more off
 set mem 10m
 
-cd "C:\Users\mikew\Desktop\University\TilburgUniversity\Master\panel_data_analysis\assignment_1"
-local data "data"
-local output "output"
+cd "C:\Users\mikew\Desktop\University\TilburgUniversity\Master\panel_data_analysis\linear_models\assignment_1"
+global datapath "data"
+global output "output"
 
 // Load data
-use "$data\soep.dta", clear
-
-// Label variables
-label variable s_life "life satisfaction, general"
-label variable s_health "health satisfaction"
-label variable s_work "job satisfaction"
-label variable s_housework "housework satisfaction"
-label variable s_fin "income satisfaction"
-label variable s_house "dwelling satisfaction"
-label variable s_leisure "leisure satisfaction"
-label variable s_env "environment satisfaction"
-label variable s_std "standard living satisfaction"
-
-label variable yedu "years education"
-label variable couple "living as couple"
-label variable work "paid work"
-
-label variable lndoctor "log doc visits"
-label variable degreehandic "degree handicapped"
-label variable hhincome "household income"
+use "$datapath\soep.dta", clear
 
 // Declare this data to be panel data
 xtset persnr year
@@ -83,27 +64,239 @@ forvalues i = 1914(10)1963 {
 }
 
 // Create macro
-local cohort_dummies "cohort_1914_c5 cohort_1919_c5 cohort_1924_c5 cohort_1929_c5 cohort_1934_c5 cohort_1939_c5 cohort_1944_c5 cohort_1949_c5 cohort_1954_c5 cohort_1959_c5 cohort_1914_c10 cohort_1924_c10 cohort_1934_c10 cohort_1944_c10 cohort_1954_c10"
+global cohort_5_dummies "cohort_1914_c5 cohort_1919_c5 cohort_1924_c5 cohort_1929_c5 cohort_1934_c5 cohort_1939_c5 cohort_1944_c5 cohort_1949_c5 cohort_1954_c5 cohort_1959_c5"
+global cohort_10_dummies "cohort_1914_c10 cohort_1924_c10 cohort_1934_c10 cohort_1944_c10 cohort_1954_c10"
 
 // Run the regression
-/* Unfortunately, we get an error when using the macro:
->reg s_life age year $cohort_dummies
-	>Error: "cohort_1914_c5 cohort_1919_c5 cohort_1924_c5 not allowed
-*/
+reg s_life age year $cohort_5_dummies $cohort_10_dummies // all dummies
+reg s_life age year $cohort_5_dummies
+reg s_life age year $cohort_10_dummies
 
-eststo: reg s_life age year cohort_1914_c5 cohort_1919_c5 cohort_1924_c5 ///
-	cohort_1929_c5 cohort_1934_c5 cohort_1939_c5 cohort_1944_c5 ///
-	cohort_1949_c5 cohort_1954_c5 cohort_1959_c5 cohort_1914_c10 ///
-	cohort_1924_c10 cohort_1934_c10 cohort_1944_c10 cohort_1954_c10
-
-esttab using "$output/output_1c.tex", ///
-	replace booktabs title(Regression table \label{tab:regression_1c})
-	
 // Exercise 2
+clear
 set seed 345398
 drawnorm alpha_i, n(200)
 expand 5
+
 drawnorm nu_it e_it, n(1000)
-g x_it=nu_it+alpha_i
+gen x_it = nu_it + alpha_i
 drop nu_it
-g y_it=3+alpha_i+2*x_it+e_it
+gen y_it = 3 + alpha_i + 2*x_it + e_it
+
+// 2b
+pwcorr,sig
+
+// Exercise 3
+clear
+set seed 345398
+capture program drop mcprog
+program mcprog
+	clear
+	drawnorm alpha_i, n(200)
+	expand 5
+	
+	drawnorm nu_it e_it, n(1000)
+	gen x_it = nu_it + alpha_i
+	drop nu_it
+	gen y_it = 3 + alpha_i + 2*x_it + e_it
+	
+	regress y_it x_it
+end
+simulate _b _se, reps(100): mcprog
+sum
+
+// a
+clear
+set seed 345398
+capture program drop mcprog_cluster
+program mcprog_cluster
+	clear
+	drawnorm alpha_i, n(200)
+	egen persnr = seq(), f(1) t(200)
+	expand 5
+	
+	drawnorm nu_it e_it, n(1000)
+	gen x_it = nu_it + alpha_i
+	drop nu_it
+	gen y_it = 3 + alpha_i + 2*x_it + e_it
+	
+	regress y_it x_it, cluster(persnr)
+end
+simulate _b _se, reps(100): mcprog_cluster
+sum
+
+// Exercise 4
+// Fixed Effects
+clear
+set seed 345398
+capture program drop mc_fixed_effects
+program mc_fixed_effects
+	clear
+	drawnorm alpha_i, n(200)
+	egen persnr = seq(), f(1) t(200)
+	expand 5
+	bysort persnr: gen t = _n-1
+	
+	drawnorm nu_it e_it, n(1000)
+	gen x_it = nu_it + alpha_i
+	drop nu_it
+	gen y_it = 3 + alpha_i + 2*x_it + e_it
+	
+	xtset persnr t
+	
+	xtreg y_it x_it, i(persnr) fe
+end
+simulate _b _se, reps(100): mc_fixed_effects
+sum
+
+// First Difference
+clear
+set seed 345398
+capture program drop mc_first_difference
+program mc_first_difference
+	clear
+	drawnorm alpha_i, n(200)
+	egen persnr = seq(), f(1) t(200)
+	expand 5
+	bysort persnr: gen t = _n-1
+	
+	drawnorm nu_it e_it, n(1000)
+	gen x_it = nu_it + alpha_i
+	drop nu_it
+	gen y_it = 3 + alpha_i + 2*x_it + e_it
+	
+	xtset persnr t
+	xtreg d.y_it d.x_it
+end
+simulate _b _se, reps(100): mc_first_difference
+sum
+
+// Exercise 5
+// For t=5
+clear
+set seed 345398
+capture program drop mc_lag_5
+program mc_lag_5
+	clear
+	drawnorm alpha_i, n(200)
+	egen persnr = seq(), f(1) t(200)
+	expand 5
+	bysort persnr: gen t = _n-1
+	
+	drawnorm nu_it e_it, n(1000)
+	gen x_it = nu_it + alpha_i
+	drop nu_it
+	gen y_it = 3 + alpha_i + 2*x_it + e_it
+	replace y_it = 3 + alpha_i + 2*x_it + e_it + 0.5*y_it[_n-1] if t!=0
+	gen y_it_lag_1 = y_it[_n-1]
+	
+	xtset persnr t
+	xtreg y_it x_it y_it_lag_1, fe
+end
+
+simulate _b _se, reps(100): mc_lag_5
+gen bias_lag = _b_y_it_lag_1 - 0.5
+sum bias_lag
+
+// For t=10
+clear
+set seed 345398
+capture program drop mc_lag_10
+program mc_lag_10
+	clear
+	drawnorm alpha_i, n(200)
+	egen persnr = seq(), f(1) t(200)
+	expand 10
+	bysort persnr: gen t = _n-1
+	
+	drawnorm nu_it e_it, n(2000)
+	gen x_it = nu_it + alpha_i
+	drop nu_it
+	gen y_it = 3 + alpha_i + 2*x_it + e_it
+	replace y_it = 3 + alpha_i + 2*x_it + e_it + 0.5*y_it[_n-1] if t!=0
+	gen y_it_lag_1 = y_it[_n-1]
+	
+	xtset persnr t
+	xtreg y_it x_it y_it_lag_1, fe
+end
+
+simulate _b _se, reps(100): mc_lag_10
+gen bias_lag = _b_y_it_lag_1 - 0.5
+sum bias_lag
+
+// For t=20
+clear
+set seed 345398
+capture program drop mc_lag_20
+program mc_lag_20
+	clear
+	drawnorm alpha_i, n(200)
+	egen persnr = seq(), f(1) t(200)
+	expand 20
+	bysort persnr: gen t = _n-1
+	
+	drawnorm nu_it e_it, n(4000)
+	gen x_it = nu_it + alpha_i
+	drop nu_it
+	gen y_it = 3 + alpha_i + 2*x_it + e_it
+	replace y_it = 3 + alpha_i + 2*x_it + e_it + 0.5*y_it[_n-1] if t!=0
+	gen y_it_lag_1 = y_it[_n-1]
+	
+	xtset persnr t
+	xtreg y_it x_it y_it_lag_1, fe
+end
+
+simulate _b _se, reps(100): mc_lag_20
+gen bias_lag = _b_y_it_lag_1 - 0.5
+sum bias_lag
+
+// For t=50
+clear
+set seed 345398
+capture program drop mc_lag_50
+program mc_lag_50
+	clear
+	drawnorm alpha_i, n(200)
+	egen persnr = seq(), f(1) t(200)
+	expand 50
+	bysort persnr: gen t = _n-1
+	
+	drawnorm nu_it e_it, n(10000)
+	gen x_it = nu_it + alpha_i
+	drop nu_it
+	gen y_it = 3 + alpha_i + 2*x_it + e_it
+	replace y_it = 3 + alpha_i + 2*x_it + e_it + 0.5*y_it[_n-1] if t!=0
+	gen y_it_lag_1 = y_it[_n-1]
+	
+	xtset persnr t
+	xtreg y_it x_it y_it_lag_1, fe
+end
+
+simulate _b _se, reps(100): mc_lag_50
+gen bias_lag = _b_y_it_lag_1 - 0.5
+sum bias_lag
+
+// Exercise 6
+clear
+set seed 345398
+capture program drop mc_arellano_bond
+program mc_arellano_bond
+	clear
+	drawnorm alpha_i, n(200)
+	egen persnr = seq(), f(1) t(200)
+	expand 5
+	bysort persnr: gen t = _n-1
+	
+	drawnorm nu_it e_it, n(1000)
+	gen x_it = nu_it + alpha_i
+	drop nu_it
+	gen y_it = 3 + alpha_i + 2*x_it + e_it
+	replace y_it = 3 + alpha_i + 2*x_it + e_it + 0.5*y_it[_n-1] if t!=0
+	gen y_it_lag_1 = y_it[_n-1]
+	
+	xtset persnr t
+	xtabond y_it x_it y_it_lag_1
+end
+
+simulate _b _se, reps(100): mc_arellano_bond
+sum
